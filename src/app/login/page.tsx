@@ -6,6 +6,18 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Mail, Sparkles } from "lucide-react";
 
+function getAuthErrorMessage(code?: string) {
+  if (code === "over_email_send_rate_limit") {
+    return "Muitos links foram solicitados. Aguarde alguns minutos antes de tentar novamente.";
+  }
+
+  if (code === "email_provider_disabled") {
+    return "O envio de e-mails ainda não foi habilitado no Mindo.";
+  }
+
+  return "Não foi possível enviar o link. Tente novamente.";
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -14,15 +26,19 @@ export default function LoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!supabase) return;
+    if (!supabase || !email.trim()) return;
     setLoading(true);
     setError(null);
+    const redirectUrl = process.env.NEXT_PUBLIC_SUPABASE_REDIRECT_URL;
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+      email: email.trim(),
+      // Sem uma URL configurada, o Supabase usa a "Site URL" do projeto.
+      // Assim, deployments temporários da Vercel não bloqueiam o envio do e-mail
+      // por não estarem na lista de Redirect URLs autorizadas.
+      options: redirectUrl ? { emailRedirectTo: redirectUrl } : undefined,
     });
     setLoading(false);
-    if (error) setError("Não foi possível enviar o link. Tente novamente.");
+    if (error) setError(getAuthErrorMessage(error.code));
     else setSent(true);
   }
 

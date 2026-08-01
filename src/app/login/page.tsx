@@ -4,39 +4,87 @@ import { FormEvent, useState } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Mail, Sparkles } from "lucide-react";
+import { Mail, Lock, Sparkles, Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-function getAuthErrorMessage(code?: string) {
+type Mode = "senha" | "cadastro" | "magico";
+
+function getAuthErrorMessage(code?: string, message?: string) {
   if (code === "over_email_send_rate_limit") {
     return "Muitos links foram solicitados. Aguarde alguns minutos antes de tentar novamente.";
   }
-
   if (code === "email_provider_disabled") {
     return "O envio de e-mails ainda não foi habilitado no Mindo.";
   }
-
-  return "Não foi possível enviar o link. Tente novamente.";
+  if (code === "invalid_credentials") {
+    return "E-mail ou senha incorretos.";
+  }
+  if (code === "user_already_exists" || message?.includes("already registered")) {
+    return "Já existe uma conta com esse e-mail. Tente entrar em vez de criar uma nova conta.";
+  }
+  if (code === "weak_password" || message?.toLowerCase().includes("password")) {
+    return "A senha precisa ter pelo menos 6 caracteres.";
+  }
+  return "Não foi possível concluir. Tente novamente.";
 }
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>("senha");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [sent, setSent] = useState(false);
+  const [confirmSent, setConfirmSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleLoginSenha(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase || !email.trim() || !password) return;
+    setLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setLoading(false);
+    if (error) setError(getAuthErrorMessage(error.code, error.message));
+    else router.replace("/");
+  }
+
+  async function handleCadastro(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase || !email.trim() || !password) return;
+    setLoading(true);
+    setError(null);
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+    });
+    setLoading(false);
+    if (error) {
+      setError(getAuthErrorMessage(error.code, error.message));
+      return;
+    }
+    // Se a confirmação por e-mail estiver ativada no projeto, não há sessão ainda.
+    if (data.session) {
+      router.replace("/");
+    } else {
+      setConfirmSent(true);
+    }
+  }
+
+  async function handleMagico(e: FormEvent) {
     e.preventDefault();
     if (!supabase || !email.trim()) return;
     setLoading(true);
     setError(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      // O Supabase usa a "Site URL" autorizada no próprio projeto. Não passamos
-      // uma URL em tempo de execução, pois uma variável antiga na Vercel (ou um
-      // deployment temporário) pode fazer o Supabase recusar o envio do e-mail.
     });
     setLoading(false);
-    if (error) setError(getAuthErrorMessage(error.code));
+    if (error) setError(getAuthErrorMessage(error.code, error.message));
     else setSent(true);
   }
 
@@ -60,19 +108,82 @@ export default function LoginPage() {
             <Sparkles size={22} />
           </div>
           <h1 className="font-display text-xl font-bold text-ink dark:text-ink-dark">
-            Entrar no Mindo
+            {mode === "cadastro" ? "Criar conta no Mindo" : "Entrar no Mindo"}
           </h1>
           <p className="text-sm text-ink-soft dark:text-ink-darkSoft">
-            Sem senha. Enviamos um link mágico para o seu e-mail.
+            {mode === "magico"
+              ? "Sem senha. Enviamos um link mágico para o seu e-mail."
+              : mode === "cadastro"
+              ? "Crie seu e-mail e senha para começar."
+              : "Entre com seu e-mail e senha."}
           </p>
         </div>
 
-        {sent ? (
+        {/* Abas de alternância */}
+        <div className="mb-5 flex rounded-xl bg-surfaceMuted p-1 text-sm dark:bg-surfaceMuted-dark">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("senha");
+              setError(null);
+            }}
+            className={`flex-1 rounded-lg py-1.5 font-medium transition-colors ${
+              mode === "senha" || mode === "cadastro"
+                ? "bg-base text-ink shadow-soft dark:bg-base-dark dark:text-ink-dark"
+                : "text-ink-soft dark:text-ink-darkSoft"
+            }`}
+          >
+            E-mail e senha
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("magico");
+              setError(null);
+            }}
+            className={`flex-1 rounded-lg py-1.5 font-medium transition-colors ${
+              mode === "magico"
+                ? "bg-base text-ink shadow-soft dark:bg-base-dark dark:text-ink-dark"
+                : "text-ink-soft dark:text-ink-darkSoft"
+            }`}
+          >
+            Link mágico
+          </button>
+        </div>
+
+        {mode === "magico" ? (
+          sent ? (
+            <div className="rounded-xl bg-calm-100 px-4 py-3 text-center text-sm text-calm-600">
+              Link enviado! Confira sua caixa de entrada e clique para continuar.
+            </div>
+          ) : (
+            <form onSubmit={handleMagico} className="flex flex-col gap-3">
+              <label className="flex items-center gap-2 rounded-xl border border-border bg-base px-3.5 py-3 dark:border-border-dark dark:bg-base-dark">
+                <Mail size={18} className="text-ink-soft dark:text-ink-darkSoft" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full bg-transparent text-sm text-ink outline-none dark:text-ink-dark"
+                />
+              </label>
+              {error && <p className="text-sm text-priority-alta">{error}</p>}
+              <Button type="submit" disabled={loading} size="lg">
+                {loading ? "Enviando..." : "Enviar link de acesso"}
+              </Button>
+            </form>
+          )
+        ) : confirmSent ? (
           <div className="rounded-xl bg-calm-100 px-4 py-3 text-center text-sm text-calm-600">
-            Link enviado! Confira sua caixa de entrada e clique para continuar.
+            Conta criada! Se a confirmação por e-mail estiver ativa, verifique sua caixa de entrada antes de entrar.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <form
+            onSubmit={mode === "cadastro" ? handleCadastro : handleLoginSenha}
+            className="flex flex-col gap-3"
+          >
             <label className="flex items-center gap-2 rounded-xl border border-border bg-base px-3.5 py-3 dark:border-border-dark dark:bg-base-dark">
               <Mail size={18} className="text-ink-soft dark:text-ink-darkSoft" />
               <input
@@ -84,10 +195,46 @@ export default function LoginPage() {
                 className="w-full bg-transparent text-sm text-ink outline-none dark:text-ink-dark"
               />
             </label>
+            <label className="flex items-center gap-2 rounded-xl border border-border bg-base px-3.5 py-3 dark:border-border-dark dark:bg-base-dark">
+              <Lock size={18} className="text-ink-soft dark:text-ink-darkSoft" />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Sua senha"
+                className="w-full bg-transparent text-sm text-ink outline-none dark:text-ink-dark"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="text-ink-soft dark:text-ink-darkSoft"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </label>
             {error && <p className="text-sm text-priority-alta">{error}</p>}
             <Button type="submit" disabled={loading} size="lg">
-              {loading ? "Enviando..." : "Enviar link de acesso"}
+              {loading
+                ? "Aguarde..."
+                : mode === "cadastro"
+                ? "Criar conta"
+                : "Entrar"}
             </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "cadastro" ? "senha" : "cadastro");
+                setError(null);
+              }}
+              className="text-center text-sm text-focus-500 hover:underline"
+            >
+              {mode === "cadastro"
+                ? "Já tenho conta — entrar"
+                : "Não tenho conta — criar agora"}
+            </button>
           </form>
         )}
       </Card>

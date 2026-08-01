@@ -25,6 +25,11 @@ function getAuthErrorMessage(code?: string, message?: string) {
   if (code === "weak_password" || message?.toLowerCase().includes("password")) {
     return "A senha precisa ter pelo menos 6 caracteres.";
   }
+  // Não reconhecemos o código — mostramos a mensagem original do Supabase
+  // (em vez de um texto genérico) para facilitar o diagnóstico.
+  if (message) {
+    return `Não foi possível concluir (${code ?? "erro"}): ${message}`;
+  }
   return "Não foi possível concluir. Tente novamente.";
 }
 
@@ -38,6 +43,8 @@ export default function LoginPage() {
   const [confirmSent, setConfirmSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resendOk, setResendOk] = useState(false);
 
   async function handleLoginSenha(e: FormEvent) {
     e.preventDefault();
@@ -73,6 +80,20 @@ export default function LoginPage() {
     } else {
       setConfirmSent(true);
     }
+  }
+
+  async function handleResendConfirmation() {
+    if (!supabase || !email.trim() || resending) return;
+    setResending(true);
+    setResendOk(false);
+    setError(null);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim(),
+    });
+    setResending(false);
+    if (error) setError(getAuthErrorMessage(error.code, error.message));
+    else setResendOk(true);
   }
 
   async function handleMagico(e: FormEvent) {
@@ -176,8 +197,51 @@ export default function LoginPage() {
             </form>
           )
         ) : confirmSent ? (
-          <div className="rounded-xl bg-calm-100 px-4 py-3 text-center text-sm text-calm-600">
-            Conta criada! Se a confirmação por e-mail estiver ativa, verifique sua caixa de entrada antes de entrar.
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-calm-100 text-calm-600">
+              <Mail size={26} />
+            </div>
+            <div>
+              <p className="font-medium text-ink dark:text-ink-dark">
+                Quase lá! Confirme seu e-mail
+              </p>
+              <p className="mt-1 text-sm text-ink-soft dark:text-ink-darkSoft">
+                Enviamos um link de confirmação para{" "}
+                <span className="font-medium text-ink dark:text-ink-dark">{email}</span>.
+                Abra o e-mail e toque em &ldquo;Confirmar conta&rdquo; — depois é só voltar
+                aqui e entrar com sua senha.
+              </p>
+            </div>
+
+            {resendOk && (
+              <p className="text-sm text-calm-600">E-mail reenviado com sucesso.</p>
+            )}
+            {error && <p className="text-sm text-priority-alta">{error}</p>}
+
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={resending}
+              onClick={handleResendConfirmation}
+            >
+              {resending ? "Reenviando..." : "Não recebi — reenviar e-mail"}
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmSent(false);
+                setMode("senha");
+                setError(null);
+              }}
+              className="text-sm text-focus-500 hover:underline"
+            >
+              Voltar para o login
+            </button>
+
+            <p className="text-xs text-ink-soft dark:text-ink-darkSoft">
+              Dica: confira também a caixa de spam ou promoções.
+            </p>
           </div>
         ) : (
           <form

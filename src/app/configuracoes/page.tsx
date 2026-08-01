@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { useSettings } from "@/hooks/useSettings";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { requestNotificationPermission } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
@@ -20,15 +21,21 @@ const THEME_OPTIONS = [
 ];
 
 export default function ConfiguracoesPage() {
-  const { ready, email } = useRequireAuth();
+  const { ready, email, userId } = useRequireAuth();
   const { theme, setTheme } = useTheme();
   const { settings, setSoundEnabled, setNotificationsEnabled } = useSettings();
+  const { subscribe, unsubscribe } = usePushSubscription(userId);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
   async function handleToggleNotifications(value: boolean) {
-    if (value) await requestNotificationPermission();
+    if (value) {
+      const permission = await requestNotificationPermission();
+      if (permission === "granted") await subscribe();
+    } else {
+      await unsubscribe();
+    }
     setNotificationsEnabled(value);
   }
 

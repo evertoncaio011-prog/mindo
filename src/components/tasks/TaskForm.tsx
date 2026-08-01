@@ -30,6 +30,7 @@ export function TaskForm({ open, onClose, onSubmit, initialTask }: TaskFormProps
   const [dueTime, setDueTime] = useState(initialTask?.dueTime ?? "");
   const [reminderEnabled, setReminderEnabled] = useState(initialTask?.reminder.enabled ?? false);
   const [repeat, setRepeat] = useState(initialTask?.reminder.repeat ?? "none");
+  const [minutesBefore, setMinutesBefore] = useState(initialTask?.reminder.minutesBefore ?? 10);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -42,7 +43,7 @@ export function TaskForm({ open, onClose, onSubmit, initialTask }: TaskFormProps
       priority,
       dueDate: dueDate || undefined,
       dueTime: dueTime || undefined,
-      reminder: { ...DEFAULT_REMINDER, enabled: reminderEnabled, repeat },
+      reminder: { ...DEFAULT_REMINDER, enabled: reminderEnabled, repeat, minutesBefore },
     });
     setSaving(false);
     onClose();
@@ -54,6 +55,7 @@ export function TaskForm({ open, onClose, onSubmit, initialTask }: TaskFormProps
       setDueTime("");
       setReminderEnabled(false);
       setRepeat("none");
+      setMinutesBefore(10);
     }
   }
 
@@ -147,22 +149,46 @@ export function TaskForm({ open, onClose, onSubmit, initialTask }: TaskFormProps
             />
           </label>
           {reminderEnabled && (
-            <div className="mt-3 flex gap-2">
-              {(["none", "daily", "weekly"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRepeat(r)}
-                  className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
-                    repeat === r
-                      ? "bg-focus-500 text-white"
-                      : "bg-surface text-ink-soft dark:bg-surface-dark dark:text-ink-darkSoft"
-                  }`}
-                >
-                  {r === "none" ? "Uma vez" : r === "daily" ? "Diariamente" : "Semanalmente"}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="mt-3 flex gap-2">
+                {(["none", "daily", "weekly"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRepeat(r)}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                      repeat === r
+                        ? "bg-focus-500 text-white"
+                        : "bg-surface text-ink-soft dark:bg-surface-dark dark:text-ink-darkSoft"
+                    }`}
+                  >
+                    {r === "none" ? "Uma vez" : r === "daily" ? "Diariamente" : "Semanalmente"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                <span className="mb-1.5 block text-xs font-medium text-ink-soft dark:text-ink-darkSoft">
+                  Avisar
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {[0, 5, 10, 15, 30, 60].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMinutesBefore(m)}
+                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        minutesBefore === m
+                          ? "bg-focus-500 text-white"
+                          : "bg-surface text-ink-soft dark:bg-surface-dark dark:text-ink-darkSoft"
+                      }`}
+                    >
+                      {m === 0 ? "No horário" : `${m} min antes`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
 

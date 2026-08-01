@@ -29,13 +29,11 @@ export default function LoginPage() {
     if (!supabase || !email.trim()) return;
     setLoading(true);
     setError(null);
-    const redirectUrl = process.env.NEXT_PUBLIC_SUPABASE_REDIRECT_URL;
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      // Sem uma URL configurada, o Supabase usa a "Site URL" do projeto.
-      // Assim, deployments temporários da Vercel não bloqueiam o envio do e-mail
-      // por não estarem na lista de Redirect URLs autorizadas.
-      options: redirectUrl ? { emailRedirectTo: redirectUrl } : undefined,
+      // O Supabase usa a "Site URL" autorizada no próprio projeto. Não passamos
+      // uma URL em tempo de execução, pois uma variável antiga na Vercel (ou um
+      // deployment temporário) pode fazer o Supabase recusar o envio do e-mail.
     });
     setLoading(false);
     if (error) setError(getAuthErrorMessage(error.code));

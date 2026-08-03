@@ -138,7 +138,13 @@ Deno.serve(async () => {
             endpoint: sub.endpoint,
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
-          payload
+          payload,
+          {
+            // Alta prioridade: pede pro Android entregar mesmo em Doze mode
+            // (economia de bateria), em vez de represar até o aparelho acordar.
+            urgency: "high",
+            TTL: 300,
+          }
         );
         sent += 1;
         console.log(`[send-reminders] push enviado com sucesso para endpoint ${sub.endpoint.slice(0, 60)}...`);

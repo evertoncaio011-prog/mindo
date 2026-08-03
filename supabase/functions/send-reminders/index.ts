@@ -63,6 +63,8 @@ Deno.serve(async () => {
   const today = local.dateISO;
   const weekday = local.weekday;
 
+  console.log(`[send-reminders] agora local: ${today} ${local.hour}:${String(local.minute).padStart(2, "0")} (weekday=${weekday})`);
+
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
     .select("id, user_id, title, due_date, due_time, completed, reminder_enabled, reminder_repeat, reminder_minutes_before, reminder_last_sent_date")
@@ -71,7 +73,16 @@ Deno.serve(async () => {
     .not("due_time", "is", null);
 
   if (tasksError) {
+    console.error(`[send-reminders] erro ao buscar tasks: ${tasksError.message}`);
     return new Response(JSON.stringify({ error: tasksError.message }), { status: 500 });
+  }
+
+  console.log(`[send-reminders] tarefas candidatas (reminder_enabled=true, completed=false, due_time preenchido): ${tasks?.length ?? 0}`);
+  for (const t of tasks ?? []) {
+    const target = subtractMinutes(t.due_time, t.reminder_minutes_before ?? 0);
+    console.log(
+      `[send-reminders] tarefa "${t.title}" due_date=${t.due_date} due_time=${t.due_time} repeat=${t.reminder_repeat} minutesBefore=${t.reminder_minutes_before} lastSent=${t.reminder_last_sent_date} -> alvo ${target.hour}:${String(target.minute).padStart(2, "0")}`
+    );
   }
 
   const dueTasks = (tasks ?? []).filter((task) => {
@@ -86,6 +97,8 @@ Deno.serve(async () => {
     return local.hour === target.hour && local.minute === target.minute;
   });
 
+  console.log(`[send-reminders] tarefas batendo com o horário agora: ${dueTasks.length}`);
+
   if (dueTasks.length === 0) {
     return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
   }
@@ -97,8 +110,11 @@ Deno.serve(async () => {
     .in("user_id", userIds);
 
   if (subsError) {
+    console.error(`[send-reminders] erro ao buscar subscriptions: ${subsError.message}`);
     return new Response(JSON.stringify({ error: subsError.message }), { status: 500 });
   }
+
+  console.log(`[send-reminders] inscrições push encontradas para esses usuários: ${subs?.length ?? 0}`);
 
   let sent = 0;
   const errors: string[] = [];
@@ -125,7 +141,9 @@ Deno.serve(async () => {
           payload
         );
         sent += 1;
+        console.log(`[send-reminders] push enviado com sucesso para endpoint ${sub.endpoint.slice(0, 60)}...`);
       } catch (err: any) {
+        console.error(`[send-reminders] falha ao enviar push (status=${err?.statusCode}) para endpoint ${sub.endpoint.slice(0, 60)}...: ${err?.body ?? err?.message ?? err}`);
         // Inscrição expirada/inválida (410/404) — remove para não tentar de novo.
         if (err?.statusCode === 404 || err?.statusCode === 410) {
           await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
